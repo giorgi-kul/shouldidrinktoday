@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DrinkDay — vanilla JS</title>
+  <style>
+    :root {
+      --bg1:#0b1220; --bg2:#0f172a; --card:#0f1627; --muted:#94a3b8; --text:#e2e8f0; --accent:#34d399;
+      --border:#1f2a44; --amber:#f59e0b; --green:#22c55e; --orange:#fb923c;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu; color:var(--text); background:linear-gradient(180deg,var(--bg1),var(--bg2));}
+    .wrap{max-width:900px;margin:0 auto;padding:24px}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+    h1{margin:0;font-size:28px;letter-spacing:-0.02em}
+    .tag{font-size:12px;opacity:.7}
+    .card{background:color-mix(in srgb,var(--card) 90%, black 10%); border:1px solid var(--border); border-radius:16px; padding:16px 18px; box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    input[type=text]{flex:1;min-width:200px;background:#0b1220;border:1px solid #263552;color:var(--text);padding:12px 14px;border-radius:12px;outline:none}
+    input[type=text]:focus{border-color:var(--accent)}
+    button{border:0;border-radius:12px;padding:12px 14px;cursor:pointer;color:#08131a}
+    .btn-primary{background:var(--accent)}
+    .btn-muted{background:#32415f;color:#dbeafe}
+    .error{margin-top:10px;color:#fecaca;background:#7f1d1d22;border:1px solid #7f1d1d66;padding:10px;border-radius:10px;font-size:14px}
+    .grid{display:grid;gap:12px}
+    @media(min-width:720px){.grid-6{grid-template-columns:repeat(6,1fr)}}
+    .chip{background:#0c1526;border:1px solid var(--border);border-radius:12px;padding:10px}
+    .small{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}
+    .big{font-size:20px;font-weight:700}
+    .verdict{display:flex;gap:12px;align-items:center}
+    .dot{width:10px;height:10px;border-radius:999px}
+    .foot{margin-top:16px;font-size:12px;color:var(--muted)}
+    .mt{margin-top:16px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>DrinkDay</h1>
+      <span class="tag">always positive vibes ✨</span>
+    </header>
+
+    <div class="card">
+      <div class="row">
+        <input id="q" type="text" placeholder="Enter a city (e.g., Tbilisi)" />
+        <button id="search" class="btn-primary">Search</button>
+        <button id="geo" class="btn-muted">Use my location</button>
+      </div>
+      <div id="err" class="error" style="display:none"></div>
+
+      <div id="results" style="display:none" class="mt">
+        <div class="row" style="justify-content:space-between">
+          <div>
+            <div class="small">Location</div>
+            <div id="loc" class="big"></div>
+          </div>
+          <div style="text-align:right">
+            <div class="small">Now</div>
+            <div id="now" class="big"></div>
+          </div>
+        </div>
+
+        <div class="card mt" style="background:#0c1526">
+          <div class="verdict">
+            <div id="dot" class="dot" style="background:var(--green)"></div>
+            <div>
+              <div id="label" class="big">Perfect day to celebrate!</div>
+              <div class="small">Drink Score: <span id="score" style="color:#e2e8f0;font-weight:700">—</span>/100</div>
+            </div>
+          </div>
+          <ul id="reasons" style="margin:10px 0 0 18px;padding:0;list-style:disc;color:#cbd5e1;font-size:14px"></ul>
+          <div class="foot">Tip: enjoy responsibly and celebrate the moment 🌟</div>
+        </div>
+
+        <div class="mt">
+          <div class="small" style="margin-bottom:6px">Evening (17:00–23:00)</div>
+          <div id="hours" class="grid grid-6"></div>
+        </div>
+
+        <div class="foot mt">Shareable: <span id="share-place" style="color:#e2e8f0"></span> → <span id="share-score" style="font-weight:700"></span> — <span id="share-label"></span></div>
+      </div>
+
+      <div id="loading" class="foot mt" style="display:none">Loading…</div>
+      <div id="hint" class="foot mt">Try <b>Tbilisi</b>, <b>Batumi</b>, <b>Berlin</b>…</div>
+    </div>
+
+    <div class="foot">Data: Open‑Meteo. Positive recommendations only ✨</div>
+  </div>
+
+  <script>
+    const WMO = {0:"Clear sky",1:"Mainly clear",2:"Partly cloudy",3:"Overcast",45:"Fog",48:"Depositing rime fog",51:"Light drizzle",53:"Moderate drizzle",55:"Dense drizzle",56:"Freezing drizzle",57:"Dense freezing drizzle",61:"Slight rain",63:"Moderate rain",65:"Heavy rain",66:"Freezing rain",67:"Heavy freezing rain",71:"Slight snow",73:"Moderate snow",75:"Heavy snow",77:"Snow grains",80:"Rain showers",81:"Moderate rain showers",82:"Violent rain showers",85:"Slight snow showers",86:"Heavy snow showers",95:"Thunderstorm",96:"Thunderstorm w/ slight hail",99:"Thunderstorm w/ heavy hail"};
+
+    const els = {
+      q: document.getElementById('q'),
+      search: document.getElementById('search'),
+      geo: document.getElementById('geo'),
+      err: document.getElementById('err'),
+      results: document.getElementById('results'),
+      loading: document.getElementById('loading'),
+      hint: document.getElementById('hint'),
+      loc: document.getElementById('loc'),
+      now: document.getElementById('now'),
+      dot: document.getElementById('dot'),
+      label: document.getElementById('label'),
+      score: document.getElementById('score'),
+      reasons: document.getElementById('reasons'),
+      hours: document.getElementById('hours'),
+      sharePlace: document.getElementById('share-place'),
+      shareScore: document.getElementById('share-score'),
+      shareLabel: document.getElementById('share-label'),
+    };
+
+    function show(el){el.style.display=''}
+    function hide(el){el.style.display='none'}
+
+    function formatPlace(g){ if(!g) return ''; const admin=g.admin1?`, ${g.admin1}`:''; return `${g.name}${admin}, ${g.country}` }
+
+    function eveningIndexes(times, tz){
+      const now = new Date();
+      const fmt = new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit'});
+      const dayPrefix = fmt.formatToParts(now).filter(p=>p.type!=='literal').map(p=>p.value).join('-');
+      const idx=[]; times.forEach((t,i)=>{ if(!t.startsWith(dayPrefix)) return; const hour=Number(t.split('T')[1].slice(0,2)); if(hour>=17 && hour<=23) idx.push(i); });
+      return idx;
+    }
+
+    function avg(arr){ return arr.reduce((a,b)=>a+b,0)/(arr.length||1) }
+
+    function computeDrinkScore({temps, wind, precip, uv, current, isWeekend}){
+      const reasons=[]; let score=70; // positive baseline
+      const aT=Math.round(avg(temps)); reasons.push(`Lovely temperature around ${aT}°C`);
+      const maxRain=Math.max(...precip);
+      if(maxRain===0){ reasons.push('Clear skies for your plans'); } else { reasons.push('Refreshing showers add to the atmosphere'); }
+      const maxWind=Math.max(...wind);
+      if(maxWind<=20){ reasons.push('Calm breezes to enjoy'); } else { reasons.push('Energetic winds bring excitement'); }
+      if(uv&&uv.length){ const maxUV=Math.max(...uv); reasons.push(maxUV>=7? 'Bright sunshine—don’t forget your shades!':'Comfortable daylight conditions'); }
+      if(isWeekend){ score+=10; reasons.push('Weekend vibes make it extra special'); } else { reasons.push('Weekdays can be fun too—why not celebrate?'); }
+      return { score: Math.max(0,Math.min(100,Math.round(score))), reasons };
+    }
+
+    function verdict(score){
+      if(score>=80) return {label:'Perfect day to celebrate!', color:'var(--green)'};
+      if(score>=60) return {label:'Great conditions for fun!', color:'var(--accent)'};
+      if(score>=40) return {label:'Still a wonderful time—make it cozy!', color:'var(--amber)'};
+      return {label:'Every day has its charm—enjoy it your way!', color:'var(--orange)'};
+    }
+
+    async function searchCity(){
+      const name=els.q.value.trim(); if(!name) return;
+      resetUI(); show(els.loading);
+      try{
+        const geo = await fetch(`https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&name=${encodeURIComponent(name)}`).then(r=>r.json());
+        if(!geo.results||!geo.results.length) throw new Error('Location not found');
+        const g=geo.results[0];
+        await loadForecast(g);
+      }catch(e){ showError(e.message||'Search failed'); }
+      finally{ hide(els.loading); }
+    }
+
+    function useMyLocation(){
+      resetUI(); show(els.loading);
+      if(!('geolocation' in navigator)){ showError('Geolocation not supported'); hide(els.loading); return; }
+      navigator.geolocation.getCurrentPosition(async pos=>{
+        try{
+          const {latitude, longitude}=pos.coords;
+          const rev = await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${latitude}&longitude=${longitude}&language=en&count=1`).then(r=>r.json());
+          const g = (rev.results&&rev.results[0]) || {name:'Your location', country:'', latitude, longitude};
+          await loadForecast(g);
+        }catch(e){ showError(e.message||'Could not get your location'); }
+        finally{ hide(els.loading); }
+      }, err=>{ hide(els.loading); showError(err.message||'Location permission denied'); }, {timeout:15000,maximumAge:60000});
+    }
+
+    async function loadForecast(place){
+      const url=new URL('https://api.open-meteo.com/v1/forecast');
+      url.searchParams.set('latitude', String(place.latitude));
+      url.searchParams.set('longitude', String(place.longitude));
+      url.searchParams.set('hourly','temperature_2m,precipitation,wind_speed_10m,uv_index');
+      url.searchParams.set('current_weather','true');
+      url.searchParams.set('forecast_days','1');
+      const data = await fetch(url).then(r=>r.json());
+
+      const tz=data.timezone||'UTC';
+      const times=data.hourly.time||[];
+      const idxs=eveningIndexes(times, tz);
+      const temps=idxs.map(i=>data.hourly.temperature_2m[i]);
+      const wind=idxs.map(i=>data.hourly.wind_speed_10m[i]);
+      const precip=idxs.map(i=>data.hourly.precipitation[i]);
+      const uv=data.hourly.uv_index? idxs.map(i=>data.hourly.uv_index[i]):undefined;
+
+      const isWeekend = ['Fri','Sat'].includes(new Intl.DateTimeFormat('en-US',{weekday:'short',timeZone:tz}).format(new Date()));
+      const pack=computeDrinkScore({temps,wind,precip,uv,current:data.current_weather,isWeekend});
+      const v=verdict(pack.score);
+
+      // Fill UI
+      els.loc.textContent = formatPlace(place);
+      els.now.textContent = `${data.current_weather.temperature.toFixed(0)}°C · ${WMO[data.current_weather.weathercode]||''}`;
+      els.score.textContent = pack.score;
+      els.label.textContent = v.label; els.dot.style.background=v.color;
+      els.reasons.innerHTML = '';
+      pack.reasons.forEach(r=>{ const li=document.createElement('li'); li.textContent=r; els.reasons.appendChild(li); });
+
+      els.hours.innerHTML='';
+      idxs.forEach(i=>{
+        const div=document.createElement('div'); div.className='chip';
+        div.innerHTML=`<div style="font-size:14px;font-weight:700">${data.hourly.time[i].split('T')[1].slice(0,5)}</div>
+                       <div style="font-size:12px;color:#cbd5e1">${data.hourly.temperature_2m[i].toFixed(0)}°C</div>
+                       <div style="font-size:12px;color:#94a3b8">💧 ${data.hourly.precipitation[i].toFixed(1)} mm</div>
+                       <div style="font-size:12px;color:#94a3b8">🌬️ ${data.hourly.wind_speed_10m[i].toFixed(0)} km/h</div>`;
+        els.hours.appendChild(div);
+      });
+
+      els.sharePlace.textContent = formatPlace(place);
+      els.shareScore.textContent = `${pack.score}/100`;
+      els.shareLabel.textContent = v.label;
+
+      hide(els.hint); show(els.results);
+    }
+
+    function resetUI(){ hide(els.err); hide(els.results); }
+    function showError(msg){ els.err.textContent=msg; show(els.err); }
+
+    // Events
+    els.search.addEventListener('click', searchCity);
+    els.q.addEventListener('keydown', e=>{ if(e.key==='Enter') searchCity(); });
+    els.geo.addEventListener('click', useMyLocation);
+  </script>
+</body>
+</html>
